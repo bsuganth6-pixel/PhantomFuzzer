@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Discover Forms — PhantomFuzzer{% endblock %}
+{% block content %}
+
+<div class="card">
+  <div class="card-title"><i class="fa-solid fa-magnifying-glass"></i> Discover Forms</div>
+  <p style="color:var(--text-mid);font-size:13px;margin-bottom:18px">
+    Fetches a page and finds every &lt;form&gt; and its input fields — click any field to send it
+    straight to the Fuzz Target tab.
+  </p>
+
+  <div class="field">
+    <label>Page URL</label>
+    <input type="text" id="urlInput" placeholder="http://localhost:5000/contact" onkeydown="if(event.key==='Enter') runDiscover()">
+  </div>
+
+  <button class="btn btn-primary" id="discoverBtn" onclick="runDiscover()">
+    <i class="fa-solid fa-magnifying-glass"></i> Discover Forms
+  </button>
+  <div class="loader" id="loader"><div class="spinner"></div> Fetching page...</div>
+</div>
+
+<div id="results"></div>
+
+{% endblock %}
+{% block scripts %}
+<script>
+async function runDiscover() {
+  const url = document.getElementById("urlInput").value.trim();
+  if (!url) { PF.toast("Enter a URL.", "error"); return; }
+
+  const btn = document.getElementById("discoverBtn");
+  const loader = document.getElementById("loader");
+  PF.setLoading(loader, btn, true);
+
+  const r = await PF.postJSON("/api/discover-forms", { url });
+
+  PF.setLoading(loader, btn, false);
+  if (!r.success) { PF.toast(r.error, "error"); return; }
+  render(r);
+}
+
+function render(r) {
+  const el = document.getElementById("results");
+  if (!r.forms.length) {
+    el.innerHTML = `<div class="card"><div class="empty-state"><i class="fa-solid fa-file"></i><p>No forms found on this page.</p></div></div>`;
+    return;
+  }
+
+  el.innerHTML = `<div class="card result-block">
+    <div class="card-title"><i class="fa-solid fa-list"></i> Forms Found <span class="badge-count">${r.forms.length}</span></div>
+    ${r.forms.map(f => `
+      <div class="form-card">
+        <div class="form-meta">${f.method} ${PF.esc(f.action)}</div>
+        <div>${f.fields.map(field => `
+          <span class="field-chip" onclick="useField('${PF.esc(f.action)}','${PF.esc(field.name)}','${f.method}')">
+            <i class="fa-solid fa-arrow-right"></i>${PF.esc(field.name)} <span style="color:var(--text-low)">(${PF.esc(field.type)})</span>
+          </span>`).join("")}
+        </div>
+      </div>`).join("")}
+  </div>`;
+}
+
+function useField(action, param, method) {
+  const params = new URLSearchParams({url: action, param, method});
+  window.location.href = "/?" + params.toString();
+}
+</script>
+{% endblock %}

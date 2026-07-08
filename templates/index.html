@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block title %}Fuzz Target — PhantomFuzzer{% endblock %}
+{% block content %}
+
+<div class="card">
+  <div class="card-title"><i class="fa-solid fa-bug"></i> Fuzz a Parameter</div>
+  <p style="color:var(--text-mid);font-size:13px;margin-bottom:18px">
+    Sends standard, publicly-documented test payloads to one parameter and analyzes responses for
+    signals of injection vulnerabilities. Establishes a baseline first, then compares every probe against it.
+  </p>
+
+  <div class="field-row">
+    <div class="field" style="flex:2">
+      <label>Target URL</label>
+      <input type="text" id="urlInput" placeholder="http://localhost:5000/search">
+    </div>
+    <div class="field" style="flex:1">
+      <label>Parameter Name</label>
+      <input type="text" id="paramInput" placeholder="q">
+    </div>
+  </div>
+
+  <div class="field-row">
+    <div class="field">
+      <label>Method</label>
+      <select id="methodInput">
+        <option value="GET">GET</option>
+        <option value="POST">POST</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Delay Between Requests (ms)</label>
+      <input type="number" id="delayInput" value="250" min="50">
+    </div>
+  </div>
+
+  <label>Vulnerability Categories</label>
+  <div class="category-grid">
+    {% for key, cat in categories.items() %}
+    <label class="checkbox-row"><input type="checkbox" class="cat-checkbox" value="{{ key }}" checked> {{ cat.label }}</label>
+    {% endfor %}
+  </div>
+
+  <button class="btn btn-primary" id="fuzzBtn" onclick="runFuzz()">
+    <i class="fa-solid fa-play"></i> Start Fuzzing
+  </button>
+  <div class="loader" id="loader"><div class="spinner"></div> Fuzzing in progress — this may take a while depending on categories selected...</div>
+</div>
+
+<div id="results"></div>
+
+{% endblock %}
+{% block scripts %}
+<script>
+// Pre-fill from Discover Forms redirect (?url=...&param=...&method=...)
+(function prefillFromQuery() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.has("url"))    document.getElementById("urlInput").value = params.get("url");
+  if (params.has("param"))  document.getElementById("paramInput").value = params.get("param");
+  if (params.has("method")) document.getElementById("methodInput").value = params.get("method");
+})();
+
+async function runFuzz() {
+  const url = document.getElementById("urlInput").value.trim();
+  const param = document.getElementById("paramInput").value.trim();
+  const method = document.getElementById("methodInput").value;
+  const delay = parseInt(document.getElementById("delayInput").value) || 250;
+  const categories = [...document.querySelectorAll(".cat-checkbox:checked")].map(c => c.value);
+
+  if (!url || !param) { PF.toast("URL and parameter name are required.", "error"); return; }
+  if (!categories.length) { PF.toast("Select at least one category.", "error"); return; }
+
+  const btn = document.getElementById("fuzzBtn");
+  const loader = document.getElementById("loader");
+  PF.setLoading(loader, btn, true);
+  document.getElementById("results").innerHTML = "";
+
+  const r = await PF.postJSON("/api/fuzz", { url, param, method, categories, delay_ms: delay });
+
+  PF.setLoading(loader, btn, false);
+
+  if (r.error) { PF.toast(r.error, "error"); return; }
+  render(r);
+}
+
+function render(r) {
+  let html = `<div class="card result-block">
+    <div class="card-title"><i class="fa-solid fa-chart-simple"></i> Session Summary</div>
+    <div class="stat-row">
+      <div class="stat-box ${r.total_findings > 0 ? 'red' : 'green'}"><span class="num">${r.total_findings}</span><span class="lbl">Findings</span></div>
+      <div class="stat-box neutral"><span class="num">${r.total_requests}</span><span class="lbl">Requests Sent</span></div>
+      <div class="stat-box cyan"><span class="num">${r.elapsed_seconds}s</span><span class="lbl">Duration</span></div>
+    </div>`;
+
+  html += `<div class="card-title" style="margin-top:6px"><i class="fa-solid fa-list"></i> By Category</div>`;
+  for (const [cat, catResult] of Object.entries(r.results)) {
+    if (catResult.error) {
+      html += `<div class="cat-result"><span class="cat-name">${PF.esc(cat)}</span><span class="cat-count" style="color:var(--red)">${PF.esc(catResult.error)}</span></div>`;
+    } else {
+      const color = catResult.findings.length > 0 ? "var(--red)" : "var(--green)";
+      html += `<div class="cat-result"><span class="cat-name">${PF.esc(cat)}</span><span class="cat-count" style="color:${color}">${catResult.findings.length} / ${catResult.payloads_tested} payloads</span></div>`;
+    }
+  }
+  html += `</div>`;
+
+  html += `<div class="card result-block">
+    <div class="card-title"><i class="fa-solid fa-triangle-exclamation"></i> Findings
+      <span class="badge-count">${r.all_findings.length}</span>
+    </div>
+    ${r.all_findings.length ? r.all_findings.map(f => PF.finding(f)).join("") :
+      '<div class="empty-state"><i class="fa-solid fa-shield-check"></i><p>No vulnerability signals detected across tested payloads.</p></div>'}
+  </div>`;
+
+  if (r.all_findings.length > 0) {
+    html += `<div class="card result-block" style="border-color:rgba(255,210,63,0.3)">
+      <p style="font-size:12px;color:var(--yellow)"><i class="fa-solid fa-circle-info"></i>
+      Findings indicate signals CONSISTENT WITH a vulnerability — automated detection has a real
+      false-positive rate. Manually verify each finding before treating it as confirmed.</p>
+    </div>`;
+  }
+
+  document.getElementById("results").innerHTML = html;
+}
+</script>
+{% endblock %}

@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Reference — PhantomFuzzer{% endblock %}
+{% block content %}
+
+<div class="card">
+  <div class="card-title"><i class="fa-solid fa-shield-halved"></i> Responsible Use</div>
+  <p style="font-size:12.5px;color:var(--text-mid);line-height:1.6">
+    PhantomFuzzer sends real, active requests to the target — this is fundamentally different from
+    passive OSINT tools. <strong style="color:var(--text-hi)">Only use it against applications you own
+    or have explicit written authorization to test</strong> (e.g. your own dev/staging environment, or
+    a scope-defined bug bounty program). It is a <strong style="color:var(--text-hi)">detection</strong>
+    tool — it sends known probe payloads and analyzes responses for anomalies. It never attempts to
+    extract data, spawn a shell, or exploit a confirmed finding.
+  </p>
+</div>
+
+<div class="card">
+  <div class="card-title"><i class="fa-solid fa-database"></i> SQL Injection Detection</div>
+  <table class="pattern-table">
+    <tr><th>Technique</th><th>How it works</th></tr>
+    <tr><td>Error-based</td><td>Sends characters that break SQL syntax (<code>'</code>, <code>--</code>), checks response for known DB error signatures</td></tr>
+    <tr><td>Boolean-based blind</td><td>Sends a TRUE condition (<code>' OR '1'='1</code>) and FALSE condition (<code>' AND '1'='2</code>), flags if responses differ significantly — a safe backend treats both as inert text</td></tr>
+    <tr><td>Time-based blind</td><td>Sends <code>SLEEP(5)</code>/<code>WAITFOR DELAY</code>/<code>pg_sleep(5)</code>, flags if the response takes measurably longer than baseline</td></tr>
+  </table>
+</div>
+
+<div class="card">
+  <div class="card-title"><i class="fa-solid fa-code"></i> XSS Detection</div>
+  <p style="font-size:12.5px;color:var(--text-mid)">
+    Sends payloads containing HTML-significant characters (<code>&lt;</code>, <code>&gt;</code>, <code>"</code>, <code>'</code>)
+    and checks whether they're reflected verbatim (vulnerable) or HTML/URL-encoded (safe). Payloads without
+    those characters are excluded from this check — escaping can't change what it has nothing to escape.
+  </p>
+</div>
+
+<div class="card">
+  <div class="card-title"><i class="fa-solid fa-terminal"></i> Command Injection Detection</div>
+  <p style="font-size:12.5px;color:var(--text-mid)">
+    Sends shell-chaining payloads (<code>; echo MARKER</code>, <code>| echo MARKER</code>, <code>$(echo MARKER)</code>)
+    with a unique marker string, and time-based payloads (<code>; sleep 5</code>). Flags a match only if the
+    marker appears WITHOUT the full injected payload also appearing (raw or encoded) — otherwise, an app that
+    simply echoes input back would falsely appear vulnerable.
+  </p>
+</div>
+
+<div class="card">
+  <div class="card-title"><i class="fa-solid fa-folder-tree"></i> Path Traversal</div>
+  <p style="font-size:12.5px;color:var(--text-mid)">
+    Sends <code>../../../../etc/passwd</code>-style payloads and checks for known file-content signatures
+    (e.g. the header line of <code>/etc/passwd</code> or a Windows <code>win.ini</code> section marker).
+  </p>
+</div>
+
+<div class="card">
+  <div class="card-title"><i class="fa-solid fa-code-branch"></i> Server-Side Template Injection (SSTI)</div>
+  <p style="font-size:12.5px;color:var(--text-mid)">
+    Sends arithmetic template expressions (<code>{{7*7}}</code>, <code>${7*7}</code>, <code>#{7*7}</code>)
+    and checks if they were EVALUATED (produces <code>49</code>) rather than reflected literally — the
+    classic technique for detecting when a template engine executes user input.
+  </p>
+</div>
+
+<div class="card">
+  <div class="card-title"><i class="fa-solid fa-circle-info"></i> Confidence Levels</div>
+  <p style="font-size:12.5px;color:var(--text-mid)">
+    <strong style="color:var(--red)">High</strong> — strong, specific signal (known error string, marker
+    executed cleanly, template expression evaluated).<br>
+    <strong style="color:var(--yellow)">Medium</strong> — behavioral difference consistent with a
+    vulnerability but with more room for coincidence (boolean-based response differences, borderline timing).<br>
+    <strong style="color:var(--cyan)">Low</strong> — worth a manual look, but a weak/generic signal (unexpected
+    server error on fuzz input).<br><br>
+    No automated tool can prove a vulnerability with certainty from black-box testing alone — always
+    manually verify findings before reporting or remediating.
+  </p>
+</div>
+
+{% endblock %}
