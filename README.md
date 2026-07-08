@@ -192,5 +192,3 @@ phantomfuzzer/
 is kept in a separate directory outside the shipped product.)
 
 ---
-
-*Day 7 of the Phantom Security toolkit. Next up: PhantomIDS.*
